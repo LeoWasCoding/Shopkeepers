@@ -188,34 +188,44 @@ final class Utils {
 		return $return;
 	}
 
-	public static function getLatest() : object {
-		$ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, "https://api.github.com/repos/FoxWorn3365/Shopkeepers/releases/latest");
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_HTTPHEADER, [
-			'User-Agent: FoxWorn3365.Shopkeepers.plugin',
-			'Accept: application/vnd.github+json'
+	public static function getLatest(): object {
+		$ch = curl_init("https://api.github.com/repos/FoxWorn3365/Shopkeepers/releases/latest");
+		curl_setopt_array($ch, [
+			CURLOPT_RETURNTRANSFER => true,
+			CURLOPT_HTTPHEADER     => [
+				'User-Agent: FoxWorn3365.Shopkeepers.plugin',
+				'Accept: application/vnd.github+json',
+			],
 		]);
-        $data = curl_exec($ch);
-        curl_close($ch);
-        $data = json_decode($data);
 
-		if (strpos($data->tag_name, '-') !== false) {
-			$data->tag_name = explode('-', $data->tag_name)[0];
+		$raw = curl_exec($ch);
+		if ($raw === false) {
+			$err = curl_error($ch);
+			curl_close($ch);
+			throw new \RuntimeException("GitHub request failed: {$err}");
+		}
+		curl_close($ch);
+
+		$data = json_decode($raw);
+		if (!is_object($data) || !isset($data->tag_name)) {
+			// Fallback to current version if something went wrong
+			return (object)['tag_name' => Core::GIT_LAST_RELASE_TAG];
+		}
+
+		// Strip any suffix (e.g. “-beta”)
+		if (str_contains($data->tag_name, '-')) {
+			[$clean] = explode('-', $data->tag_name, 2);
+			$data->tag_name = $clean;
 		}
 
 		return $data;
 	}
 
-	public static function isLatest(?object $data = null) : bool {
+	public static function isLatest(?object $data = null): bool {
 		if ($data === null) {
 			$data = self::getLatest();
 		}
 
-		if (Core::GIT_LAST_RELASE_TAG !== $data->tag_name) {
-			return false;
-		}
-
-		return true;
+		return Core::GIT_LAST_RELASE_TAG === ($data->tag_name ?? '');
 	}
 }
